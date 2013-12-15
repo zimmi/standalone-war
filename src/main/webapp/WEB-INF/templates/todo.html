@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:th="http://www.thymeleaf.org">
+    <head>
+        <meta charset="UTF-8" />
+        <title th:text="#{test.title}">Todo-Liste #802938</title>
+        <link rel="shortcut icon" href="../../static/favicon.ico" th:href="|${@environment.getRequiredProperty('resourceroot')}favicon.ico|" />
+    </head>
+    <!-- Idea: Just have a giant textbox. Posts can be voted upon by other users and escalated. Like story telling. Or interesting stuff to talk about. Very little structure. No accounts. Just anonymity. And a lot of viagra spamming and Markov chains explaining that they really like this site and that you should definitely check out those hot sneaker sales. -->
+    <body>
+        <span th:text="${message}">Message here.</span>
+        <ol data-dropdown-menu="">
+            <li th:each="todo : ${todos}" th:text="${todo.description}">Dummy</li>
+        </ol>
+
+        <form accept-charset="UTF-8" action="/" method="POST">
+            <textarea name="description" style="display: block;" />
+            <input type="submit" value="Mach schon" />
+        </form>
+    </body>
+</html>

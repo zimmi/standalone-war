@@ -1,0 +1,1 @@
+INSERT INTO todo_item(description) VALUES( :description );

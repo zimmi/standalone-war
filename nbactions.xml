@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<actions>
+    <action>
+        <actionName>CUSTOM-jetty:run DEBUG</actionName>
+        <displayName>jetty:run DEBUG</displayName>
+        <goals>
+            <goal>jetty:run</goal>
+        </goals>
+        <properties>
+            <Env.MAVEN_OPTS>-XX:PermSize=64M -XX:MaxPermSize=256M -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5003</Env.MAVEN_OPTS>
+        </properties>
+    </action>
+    <action>
+        <actionName>CUSTOM-jetty:stop</actionName>
+        <displayName>jetty:stop</displayName>
+        <goals>
+            <goal>jetty:stop</goal>
+        </goals>
+    </action>
+    <action>
+        <actionName>CUSTOM-exec:exec</actionName>
+        <displayName>exec:exec</displayName>
+        <goals>
+            <goal>clean</goal>
+            <goal>install</goal>
+            <goal>exec:exec</goal>
+        </goals>
+    </action>
+</actions>

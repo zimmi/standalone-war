@@ -1,0 +1,1 @@
+SELECT description FROM todo_item;

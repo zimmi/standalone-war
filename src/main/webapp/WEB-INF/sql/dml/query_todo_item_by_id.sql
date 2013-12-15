@@ -1,0 +1,1 @@
+SELECT description FROM todo_item WHERE todo_item_id = :todo_item_id;
