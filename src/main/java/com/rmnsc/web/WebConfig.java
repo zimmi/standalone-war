@@ -25,10 +25,9 @@ import org.springframework.web.servlet.handler.BeanNameUrlHandlerMapping;
 import org.springframework.web.servlet.i18n.LocaleChangeInterceptor;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
-import org.thymeleaf.spring3.SpringTemplateEngine;
-import org.thymeleaf.spring3.dialect.SpringStandardDialect;
-import org.thymeleaf.spring3.messageresolver.SpringNonCacheableMessageResolver;
-import org.thymeleaf.spring3.view.ThymeleafViewResolver;
+import org.thymeleaf.spring4.SpringTemplateEngine;
+import org.thymeleaf.spring4.messageresolver.SpringNonCacheableMessageResolver;
+import org.thymeleaf.spring4.view.ThymeleafViewResolver;
 import org.thymeleaf.templateresolver.ServletContextTemplateResolver;
 
 /**
@@ -59,10 +58,6 @@ public class WebConfig extends WebMvcConfigurationSupport {
         RequestMappingHandlerMapping mapping = super.requestMappingHandlerMapping();
         mapping.setUseSuffixPatternMatch(false);
         mapping.setUseTrailingSlashMatch(true);
-        
-        
-       new org.thymeleaf.standard.StandardDialect();//.<init>(StandardDialect.java:453)
-        new SpringStandardDialect();
         return mapping;
     }
 
@@ -87,12 +82,12 @@ public class WebConfig extends WebMvcConfigurationSupport {
         // All the message-files MUST be UTF-8 encoded.
         messageSource.setDefaultEncoding(StandardCharsets.UTF_8.name());
         messageSource.setFallbackToSystemLocale(false);
-        
-        if(environment.acceptsProfiles(Profile.DEV.getPropertyName())){
+
+        if (environment.acceptsProfiles(Profile.DEV.getPropertyName())) {
             messageSource.setCacheSeconds(0);
             messageSource.setUseCodeAsDefaultMessage(true);
         }
-        
+
         return messageSource;
     }
 
@@ -156,11 +151,7 @@ public class WebConfig extends WebMvcConfigurationSupport {
 
         viewResolver.setTemplateEngine(templateEngine);
 
-
-
-
         // TODO start daemon thread/use some threadpool to initialize thymeleaf-engine. find out how. fake-render? init-method?
-
         return viewResolver;
     }
 }

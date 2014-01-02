@@ -1,6 +1,7 @@
 package com.rmnsc.persistence;
 
-import com.jolbox.bonecp.BoneCPDataSource;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.Writer;
@@ -85,60 +86,46 @@ public class PersistenceConfig implements TransactionManagementConfigurer {
 
     @Bean
     public DataSource dataSource() {
-        PGSimpleDataSource rawDataSource = new PGSimpleDataSource();
-        rawDataSource.setServerName(environment.getRequiredProperty("rmnsc.jdbc.host"));
-        rawDataSource.setPortNumber(environment.getRequiredProperty("rmnsc.jdbc.port", int.class));
-        rawDataSource.setDatabaseName(environment.getRequiredProperty("rmnsc.jdbc.dbname"));
-        rawDataSource.setUser(environment.getRequiredProperty("rmnsc.jdbc.username"));
-        rawDataSource.setPassword(environment.getRequiredProperty("rmnsc.jdbc.password"));
+        final boolean autoCommit = false;
+        
+        PGSimpleDataSource ds = new  PGSimpleDataSource();
+        
+        HikariConfig config = new HikariConfig();
+        config.setUseInstrumentation(false);
+        
+        config.setDataSourceClassName(PGSimpleDataSource.class.getName());
+        config.addDataSourceProperty("serverName", environment.getRequiredProperty("rmnsc.jdbc.host"));
+        config.addDataSourceProperty("portNumber", environment.getRequiredProperty("rmnsc.jdbc.port", int.class));
+        config.addDataSourceProperty("databaseName", environment.getRequiredProperty("rmnsc.jdbc.dbname"));
+        config.addDataSourceProperty("user", environment.getRequiredProperty("rmnsc.jdbc.username"));
+        config.addDataSourceProperty("password", environment.getRequiredProperty("rmnsc.jdbc.password"));
+        
+        config.setAutoCommit(autoCommit);
+        // Will work when https://github.com/brettwooldridge/HikariCP/issues/18 is released
+        //config.setTransactionIsolation("TRANSACTION_REPEATABLE_READ");
+        
+        config.setMinimumPoolSize(5);
+        config.setMaximumPoolSize(50);
+        
+        HikariDataSource connectionPool = new HikariDataSource(config);
+        // Will work when https://github.com/brettwooldridge/HikariCP/issues/17 is released
         try {
-            rawDataSource.setLogWriter(
+            connectionPool.setLogWriter(
                     new PrintWriter(
-                    new Slf4jInfoWriter(LoggerFactory.getLogger(rawDataSource.getClass())), true));
+                    new Slf4jInfoWriter(LoggerFactory.getLogger(PGSimpleDataSource.class)), true));
         } catch (SQLException ex) {
             LOGGER.warn("could not add logging to postgres datasource", ex);
         }
-
-        BoneCPDataSource poolingDataSource = new BoneCPDataSource();
-        poolingDataSource.setDatasourceBean(rawDataSource);
-
-        poolingDataSource.setAcquireIncrement(1);
-        poolingDataSource.setDetectUnclosedStatements(false);
-        poolingDataSource.setDetectUnresolvedTransactions(false);
-        poolingDataSource.setDisableConnectionTracking(true);
-        poolingDataSource.setDisableJMX(true);
-        poolingDataSource.setExternalAuth(false);
-        poolingDataSource.setIdleConnectionTestPeriodInMinutes(0);
-        poolingDataSource.setIdleMaxAgeInMinutes(0);
-        poolingDataSource.setLazyInit(true);
-
-        poolingDataSource.setLogStatementsEnabled(false); // jdbctemplate does this already
-        poolingDataSource.setMaxConnectionAgeInSeconds(0);
-
-        poolingDataSource.setMinConnectionsPerPartition(5);
-        poolingDataSource.setMaxConnectionsPerPartition(10);
-        poolingDataSource.setPartitionCount(3);
-
-        poolingDataSource.setPoolAvailabilityThreshold(0);
-        poolingDataSource.setQueryExecuteTimeLimitInMs(1000);
-        poolingDataSource.setResetConnectionOnClose(false);
-        poolingDataSource.setStatisticsEnabled(false);
         
-        poolingDataSource.setTransactionRecoveryEnabled(true);
-        poolingDataSource.setAcquireRetryDelayInMs(0);
-
-        poolingDataSource.setDefaultAutoCommit(false);
-        poolingDataSource.setDefaultTransactionIsolation("READ_COMMITTED");
-
         // Wrap the dataSource such that a Connection is only acquired if a statement
         // is created. This avoids potentially expensive Connection creation in methods
         // that are marked transactional but don't actually talk to the database.
         LazyConnectionDataSourceProxy lazyDataSource = new LazyConnectionDataSourceProxy();
-        lazyDataSource.setTargetDataSource(poolingDataSource);
+        lazyDataSource.setTargetDataSource(connectionPool);
 
         // Tell Spring about the default settings so that it does not have to fetch a connection on startup to check them.
-        lazyDataSource.setDefaultAutoCommit(poolingDataSource.getDefaultAutoCommit());
-        lazyDataSource.setDefaultTransactionIsolationName("TRANSACTION_" + poolingDataSource.getDefaultTransactionIsolation());
+        lazyDataSource.setDefaultAutoCommit(autoCommit);
+        // lazyDataSource.setDefaultTransactionIsolationName(config.getTransactionIsolation());
 
         return lazyDataSource;
     }
