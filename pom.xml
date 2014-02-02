@@ -10,12 +10,12 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <!-- dependency versions -->
-        <spring.version>4.0.0.RELEASE</spring.version>
+        <spring.version>4.0.1.RELEASE</spring.version>
         <spring.security.version>3.2.0.RELEASE</spring.security.version>
         <slf4j.version>1.7.5</slf4j.version>
-        <logback.version>1.0.13</logback.version>
+        <logback.version>1.1.0</logback.version>
 
-        <jetty.version>9.1.0.v20131115</jetty.version>
+        <jetty.version>9.1.1.v20140108</jetty.version>
 
         <!-- embedded container -->
         <embedded.container.package>embeddedcontainer</embedded.container.package>
@@ -70,13 +70,7 @@
         <dependency>
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP</artifactId>
-            <version>1.2.1</version>
-            <exclusions>
-                <exclusion>
-                    <artifactId>tools</artifactId>
-                    <groupId>com.sun</groupId>
-                </exclusion>
-            </exclusions>
+            <version>1.2.8</version>
         </dependency>
 
         <!-- Makes database migration easy. -->
@@ -234,7 +228,7 @@
                             <goal>copy-dependencies</goal>
                         </goals>
                         <configuration>
-                            <includeGroupIds>org.eclipse.jetty</includeGroupIds>
+                            <includeGroupIds>org.eclipse.jetty, javax.servlet</includeGroupIds>
                             <outputDirectory>${project.build.directory}/${project.build.finalName}/${embedded.container.lib}</outputDirectory>
                         </configuration>
                     </execution>

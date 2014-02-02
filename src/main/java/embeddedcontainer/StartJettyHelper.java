@@ -12,6 +12,10 @@ import ch.qos.logback.core.read.ListAppender;
 import ch.qos.logback.core.rolling.RollingFileAppender;
 import ch.qos.logback.core.rolling.TimeBasedRollingPolicy;
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.HandlerCollection;
 import org.eclipse.jetty.server.handler.RequestLogHandler;
@@ -71,14 +75,11 @@ class StartJettyHelper {
         webapp.setLogger(jettyLog);
         webapp.setLogUrlOnStart(true);
 
-        configureHttpAccessLogging(webapp, handlers);
+        configureHttpAccessLogging(handlers);
 
         webapp.setCopyWebDir(false);
         webapp.setCopyWebInf(false);
-        webapp.setTempDirectory(
-                new File(
-                        System.getProperty("javax.servlet.context.tempdir",
-                                System.getProperty("java.io.tmpdir"))));
+        webapp.setTempDirectory(createJettyTempDirectory(warPath));
 
         webapp.setWar(warPath);
 
@@ -120,7 +121,14 @@ class StartJettyHelper {
         server.join();
     }
 
-    private static void configureHttpAccessLogging(WebAppContext webapp, HandlerCollection handlers) {
+    private static File createJettyTempDirectory(String warPath) throws IOException {
+        // Jettys temporary directory must be empty at startup.
+        // The war directory already contains our extracted war, so make a new one next to it.
+        Path workDir = Paths.get(warPath).getParent();
+        return Files.createTempDirectory(workDir, "jetty-tmp-").toFile();
+    }
+
+    private static void configureHttpAccessLogging(HandlerCollection handlers) {
         // Configure logback-access
         RequestLogHandler requestLogHandler = new RequestLogHandler();
         RequestLogImpl requestLogImpl = new RequestLogImpl();
@@ -144,7 +152,8 @@ class StartJettyHelper {
 
         PatternLayoutEncoder patternLayoutEncoder = new PatternLayoutEncoder();
         patternLayoutEncoder.setContext(requestLogImpl);
-        patternLayoutEncoder.setPattern(PatternLayout.COMBINED_PATTERN_NAME);
+        patternLayoutEncoder.setPattern(PatternLayout.COMBINED_PATTERN + " %elapsedTime");
+
         patternLayoutEncoder.start();
 
         rollingFileAppender.setEncoder(patternLayoutEncoder);

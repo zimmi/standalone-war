@@ -11,7 +11,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.support.ReloadableResourceBundleMessageSource;
 import org.springframework.core.Ordered;
-import org.springframework.core.env.Environment;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.web.servlet.LocaleResolver;
@@ -38,7 +37,7 @@ import org.thymeleaf.templateresolver.ServletContextTemplateResolver;
 public class WebConfig extends WebMvcConfigurationSupport {
 
     @Autowired
-    private Environment environment;
+    private AppConfig appConfig;
 
     @Override
     public BeanNameUrlHandlerMapping beanNameHandlerMapping() {
@@ -72,7 +71,7 @@ public class WebConfig extends WebMvcConfigurationSupport {
     private String getResourceRootPattern() {
         // TODO: Remove this property and this pattern when this ticket is done:
         // https://jira.springsource.org/browse/SPR-10310
-        return environment.getRequiredProperty("resourceroot") + "**";
+        return appConfig.getResourceRoot() + "**";
     }
 
     @Bean
@@ -83,7 +82,7 @@ public class WebConfig extends WebMvcConfigurationSupport {
         messageSource.setDefaultEncoding(StandardCharsets.UTF_8.name());
         messageSource.setFallbackToSystemLocale(false);
 
-        if (environment.acceptsProfiles(Profile.DEV.getPropertyName())) {
+        if (appConfig.isDevelopment()) {
             messageSource.setCacheSeconds(0);
             messageSource.setUseCodeAsDefaultMessage(true);
         }
@@ -100,7 +99,7 @@ public class WebConfig extends WebMvcConfigurationSupport {
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         ResourceHandlerRegistration resourceHandlerRegistration = registry.addResourceHandler(this.getResourceRootPattern());
-        resourceHandlerRegistration.addResourceLocations(environment.getRequiredProperty("resourceroot.internal"));
+        resourceHandlerRegistration.addResourceLocations(appConfig.getInternalResourceRoot());
         // cache for about one year
         resourceHandlerRegistration.setCachePeriod(31556926);
     }
@@ -142,7 +141,7 @@ public class WebConfig extends WebMvcConfigurationSupport {
         // 303 on redirect, as of the HTTP 1.1 spec
         viewResolver.setRedirectHttp10Compatible(false);
 
-        if (environment.acceptsProfiles(Profile.DEV.getPropertyName())) {
+        if (appConfig.isDevelopment()) {
             // Disable all caching of templates. Pretty slow.
             // Allows for editing templates inside IDE WITHOUT reload of application.
             templateEngine.setCacheManager(null);

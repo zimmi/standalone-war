@@ -10,15 +10,13 @@ import ch.qos.logback.core.read.ListAppender;
 import ch.qos.logback.core.rolling.RollingFileAppender;
 import ch.qos.logback.core.rolling.TimeBasedRollingPolicy;
 import ch.qos.logback.core.util.StatusPrinter;
-import com.rmnsc.config.Profile;
+import com.rmnsc.config.AppConfig;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import javax.servlet.FilterRegistration;
 import javax.servlet.ServletContext;
@@ -28,13 +26,8 @@ import javax.servlet.ServletRegistration;
 import javax.servlet.SessionTrackingMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.env.AbstractEnvironment;
-import org.springframework.core.env.ConfigurableEnvironment;
-import org.springframework.core.env.MapPropertySource;
-import org.springframework.core.env.MutablePropertySources;
+import org.springframework.context.support.GenericApplicationContext;
 import org.springframework.web.context.support.AnnotationConfigWebApplicationContext;
-import org.springframework.web.context.support.ServletContextPropertySource;
-import org.springframework.web.context.support.StandardServletEnvironment;
 import org.springframework.web.filter.CharacterEncodingFilter;
 import org.springframework.web.servlet.DispatcherServlet;
 import org.springframework.web.util.HttpSessionMutexListener;
@@ -46,7 +39,6 @@ import org.springframework.web.util.HttpSessionMutexListener;
 public class StartupServletContextListener implements ServletContextListener {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(StartupServletContextListener.class);
-    private static final String ACTIVE_PROFILE_PROPERTY_NAME = "rmnsc.profile";
 
     private static PatternLayoutEncoder createLoggingEncoder(LoggerContext loggerContext) {
         PatternLayoutEncoder patternLayoutEncoder = new PatternLayoutEncoder();
@@ -93,7 +85,7 @@ public class StartupServletContextListener implements ServletContextListener {
         return rollingFileAppender;
     }
 
-    private static void initializeLogback(Profile activeProfile) {
+    private static void initializeLogback(AppConfig appConfig) {
         // Inlitialize logback in code to avoid dependency on logback-config-dependency Janino
         // since there's really no need for it. Also more IDE support on logging changes.
 
@@ -103,16 +95,14 @@ public class StartupServletContextListener implements ServletContextListener {
 
         Appender<ILoggingEvent> appender;
         Level level;
-        // We COULD associate appender and level directly with Profile and do away with this brittle-to-change if-else-cascade.
-        // Meh.
-        if (activeProfile == Profile.DEV) {
+        if (appConfig.isDevelopment()) {
             appender = createDevAppender(loggerContext);
             level = Level.DEBUG;
-        } else if (activeProfile == Profile.PROD) {
+        } else if (appConfig.isProduction()) {
             appender = createProdAppender(loggerContext);
             level = Level.INFO;
         } else {
-            throw new IllegalStateException("forgot to handle profile: " + activeProfile.name() + " with profile property: " + activeProfile.getPropertyName());
+            throw new IllegalStateException("forgot to handle logging for profile: " + appConfig.getActiveProfile());
         }
 
         // If there was a ListAppender buffering startup events, replay them.
@@ -142,50 +132,6 @@ public class StartupServletContextListener implements ServletContextListener {
         StatusPrinter.printInCaseOfErrorsOrWarnings(loggerContext);
     }
 
-    private static ConfigurableEnvironment initializeEnvironment(final ServletContext servletContext, Profile activeProfile, final Properties defaultProperties) {
-        ConfigurableEnvironment environment = new AbstractEnvironment() {
-            @Override
-            @SuppressWarnings("unchecked")
-            protected void customizePropertySources(MutablePropertySources propertySources) {
-                propertySources.addLast(new ServletContextPropertySource(StandardServletEnvironment.SERVLET_CONTEXT_PROPERTY_SOURCE_NAME, servletContext));
-                // premature optimization: removing synchronization of properties
-                propertySources.addLast(new MapPropertySource("defaultProperties", new HashMap(defaultProperties)));
-
-                // Set some additional internal properties.
-                Map<String, Object> internalProperties = new HashMap<>();
-
-                internalProperties.put("resourceroot.internal", "/static/");
-
-                // The path to static resources as seen from the client.
-                // Version information is embedded in this path to avoid
-                // client caching problems on version upgrade.
-                // TODO: Maybe maven filtering to have this automated? generate random/timestamp on -SNAPSHOT?
-                internalProperties.put("resourceroot", this.resolveRequiredPlaceholders("/static-${rmnsc.resources.version}/"));
-                propertySources.addLast(new MapPropertySource("internalProperties", internalProperties));
-            }
-        };
-        environment.setActiveProfiles(activeProfile.getPropertyName());
-
-        return environment;
-    }
-
-    private static Profile determineActiveProfile(ServletContext servletContext, Properties defaultProperties) {
-        String activeProfileProp = servletContext.getInitParameter(ACTIVE_PROFILE_PROPERTY_NAME);
-        if (activeProfileProp == null) {
-            activeProfileProp = defaultProperties.getProperty(ACTIVE_PROFILE_PROPERTY_NAME);
-        }
-        if (activeProfileProp == null) {
-            throw new IllegalStateException(ACTIVE_PROFILE_PROPERTY_NAME + " property not set as servlet-context init-param or default property.");
-        }
-
-        Profile activeProfile = Profile.valueOfPropertyName(activeProfileProp);
-        if (activeProfile == null) {
-            throw new IllegalStateException("unrecognized profile property: " + activeProfileProp);
-        }
-
-        return activeProfile;
-    }
-
     private static Properties readDefaultProperties() {
         Properties defaultProperties = new Properties();
         try (InputStream in = StartupServletContextListener.class.getResourceAsStream("/default.properties")) {
@@ -198,34 +144,46 @@ public class StartupServletContextListener implements ServletContextListener {
 
     @Override
     public void contextInitialized(ServletContextEvent sce) {
-        ServletContext servletContext = sce.getServletContext();
+        Properties defaults = readDefaultProperties();
 
-        Properties defaultProperties = readDefaultProperties();
-        // There is only one active Profile supported.
-        Profile activeProfile = determineActiveProfile(servletContext, defaultProperties);
+        Properties props = new Properties(defaults);
+        props.putAll(System.getProperties());
+
+        AppConfig appConfig = new AppConfig(props);
 
         // Initialize logging as early as possible, so no logging events are lost.
-        initializeLogback(activeProfile);
-
-        ConfigurableEnvironment environment = initializeEnvironment(servletContext, activeProfile, defaultProperties);
+        initializeLogback(appConfig);
 
         // log only AFTER configuring the logger
         LOGGER.info("webapp context initialized");
 
+        ServletContext servletContext = sce.getServletContext();
+
         AnnotationConfigWebApplicationContext context = new AnnotationConfigWebApplicationContext();
+        
+        // Add AppConfig to the application context
+        GenericApplicationContext parentContext = new GenericApplicationContext();
+        parentContext.refresh();
+        parentContext.getBeanFactory().registerSingleton("appConfig", appConfig);
+        context.setParent(parentContext);
+        
+        context.getEnvironment().setActiveProfiles(appConfig.getActiveProfile());
         context.setAllowCircularReferences(false);
         context.setAllowBeanDefinitionOverriding(false);
         context.setServletContext(servletContext);
-        context.setEnvironment(environment);
-
-        // Everything else is configured transitively.
-        context.register(com.rmnsc.web.Controllers.class);
 
         DispatcherServlet dispatcherServlet = new DispatcherServlet(context);
-        ServletRegistration.Dynamic dispatcherReg =
-                servletContext.addServlet("dispatcherServlet", dispatcherServlet);
+        ServletRegistration.Dynamic dispatcherReg
+                = servletContext.addServlet("dispatcherServlet", dispatcherServlet);
         dispatcherReg.addMapping("/");
         dispatcherReg.setLoadOnStartup(0);
+        
+        //dispatcherServlet.refresh();
+        
+        //context.getBeanFactory().registerSingleton("appConfig", appConfig);
+        // Everything else is configured transitively.
+        context.register(com.rmnsc.web.Controllers.class);
+        //dispatcherServlet.refresh();
 
         // Changing the character encoding MUST be the first filter.
         // At least prior to reading request parameters.

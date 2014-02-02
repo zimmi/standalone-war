@@ -22,7 +22,8 @@ import org.springframework.util.ReflectionUtils.FieldCallback;
  * this.
  *
  * This is actually not really better than hardcoding the name of the SQL-file.
- * But this app is just a proof of concept, so what.
+ * But this app is just a proof of concept, so what. At least the member variables are consistent.
+ * Removes one case of naming variables. That's a win, I guess.
  *
  * @author thomas
  */

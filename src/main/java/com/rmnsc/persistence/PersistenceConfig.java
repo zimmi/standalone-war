@@ -1,5 +1,6 @@
 package com.rmnsc.persistence;
 
+import com.rmnsc.config.AppConfig;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import java.io.IOException;
@@ -15,7 +16,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -63,7 +63,7 @@ public class PersistenceConfig implements TransactionManagementConfigurer {
             // Remove trailing line separators.
             int end = builder.length();
             int lastLineSep = builder.lastIndexOf(System.lineSeparator());
-            if(lastLineSep != -1 && lastLineSep + System.lineSeparator().length() == end){
+            if (lastLineSep != -1 && lastLineSep + System.lineSeparator().length() == end) {
                 end = lastLineSep;
             }
             logger.info(builder.substring(0, end));
@@ -77,7 +77,7 @@ public class PersistenceConfig implements TransactionManagementConfigurer {
         }
     }
     @Autowired
-    private Environment environment;
+    private AppConfig appConfig;
 
     @Bean
     public BeanPostProcessor autowireSqlBeanPostProcessor() {
@@ -86,46 +86,38 @@ public class PersistenceConfig implements TransactionManagementConfigurer {
 
     @Bean
     public DataSource dataSource() {
-        final boolean autoCommit = false;
-        
-        PGSimpleDataSource ds = new  PGSimpleDataSource();
-        
+        PGSimpleDataSource dataSource = new PGSimpleDataSource();
+        dataSource.setServerName(appConfig.getJdbcHost());
+        dataSource.setPortNumber(appConfig.getJdbcPort());
+        dataSource.setDatabaseName(appConfig.getJdbcDbName());
+        dataSource.setUser(appConfig.getJdbcUsername());
+        dataSource.setPassword(appConfig.getJdbcPassword());
+        try {
+            dataSource.setLogWriter(new PrintWriter(
+                    new Slf4jInfoWriter(LoggerFactory.getLogger(dataSource.getClass().getName())),
+                    true));
+        } catch (SQLException ex) {
+            LOGGER.warn("failed to enable logging for raw postgres datasource", ex);
+        }
+
         HikariConfig config = new HikariConfig();
-        config.setUseInstrumentation(false);
-        
-        config.setDataSourceClassName(PGSimpleDataSource.class.getName());
-        config.addDataSourceProperty("serverName", environment.getRequiredProperty("rmnsc.jdbc.host"));
-        config.addDataSourceProperty("portNumber", environment.getRequiredProperty("rmnsc.jdbc.port", int.class));
-        config.addDataSourceProperty("databaseName", environment.getRequiredProperty("rmnsc.jdbc.dbname"));
-        config.addDataSourceProperty("user", environment.getRequiredProperty("rmnsc.jdbc.username"));
-        config.addDataSourceProperty("password", environment.getRequiredProperty("rmnsc.jdbc.password"));
-        
-        config.setAutoCommit(autoCommit);
-        // Will work when https://github.com/brettwooldridge/HikariCP/issues/18 is released
-        //config.setTransactionIsolation("TRANSACTION_REPEATABLE_READ");
-        
+        config.setDataSource(dataSource);
+        config.setAutoCommit(false);
+        config.setTransactionIsolation("TRANSACTION_REPEATABLE_READ");
         config.setMinimumPoolSize(5);
         config.setMaximumPoolSize(50);
-        
+
         HikariDataSource connectionPool = new HikariDataSource(config);
-        // Will work when https://github.com/brettwooldridge/HikariCP/issues/17 is released
-        try {
-            connectionPool.setLogWriter(
-                    new PrintWriter(
-                    new Slf4jInfoWriter(LoggerFactory.getLogger(PGSimpleDataSource.class)), true));
-        } catch (SQLException ex) {
-            LOGGER.warn("could not add logging to postgres datasource", ex);
-        }
-        
-        // Wrap the dataSource such that a Connection is only acquired if a statement
+
+        // Wrap the pool so that a Connection is only acquired if a statement
         // is created. This avoids potentially expensive Connection creation in methods
         // that are marked transactional but don't actually talk to the database.
         LazyConnectionDataSourceProxy lazyDataSource = new LazyConnectionDataSourceProxy();
         lazyDataSource.setTargetDataSource(connectionPool);
 
         // Tell Spring about the default settings so that it does not have to fetch a connection on startup to check them.
-        lazyDataSource.setDefaultAutoCommit(autoCommit);
-        // lazyDataSource.setDefaultTransactionIsolationName(config.getTransactionIsolation());
+        lazyDataSource.setDefaultAutoCommit(config.isAutoCommit());
+        lazyDataSource.setDefaultTransactionIsolation(config.getTransactionIsolation());
 
         return lazyDataSource;
     }

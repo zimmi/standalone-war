@@ -62,13 +62,11 @@ class StartServerMain {
         // Do the cleanup on startup since shutdown-hooks are unreliable.
         workDir = prepareWorkDir(workDir);
 
-        // Let libs use this same folder.
-        String workDirString = workDir.toString();
-        System.setProperty("java.io.tmpdir", workDirString);
-        System.setProperty("javax.servlet.context.tempdir", workDirString);
+        // Let libs use a separate folder to avoid collisions.
+        String javaTmpDir = Files.createTempDirectory(workDir, "java-tmp-").toString();
+        System.setProperty("java.io.tmpdir", javaTmpDir);
 
         Path extractedWarDir = Files.createTempDirectory(workDir, "war-tmp-");
-
         extractWar(warLocation, extractedWarDir);
 
         File[] containerLibs = extractedWarDir.resolve(EMBEDDED_CONTAINER_LIB_DIR).toFile().listFiles();
