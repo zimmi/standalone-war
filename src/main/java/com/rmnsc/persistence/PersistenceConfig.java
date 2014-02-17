@@ -102,10 +102,12 @@ public class PersistenceConfig implements TransactionManagementConfigurer {
 
         HikariConfig config = new HikariConfig();
         config.setDataSource(dataSource);
+        config.setRegisterMbeans(false);
         config.setAutoCommit(false);
         config.setTransactionIsolation("TRANSACTION_REPEATABLE_READ");
         config.setMinimumPoolSize(5);
         config.setMaximumPoolSize(50);
+        config.setInitializationFailFast(true);
 
         HikariDataSource connectionPool = new HikariDataSource(config);
 

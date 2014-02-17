@@ -12,10 +12,6 @@ import ch.qos.logback.core.read.ListAppender;
 import ch.qos.logback.core.rolling.RollingFileAppender;
 import ch.qos.logback.core.rolling.TimeBasedRollingPolicy;
 import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.HandlerCollection;
 import org.eclipse.jetty.server.handler.RequestLogHandler;
@@ -41,7 +37,7 @@ import org.slf4j.LoggerFactory;
  */
 class StartJettyHelper {
 
-    public static void startJetty(String warPath, int port) throws Exception {
+    public static void startJetty(String warPath, File jettyTmpDir, int port) throws Exception {
         // Temporarily configure logback. Will be overwritten by webapp later.
         // Buffer all messages and forward them to the webapp, so they can be logged with the real configuration.
 
@@ -79,7 +75,7 @@ class StartJettyHelper {
 
         webapp.setCopyWebDir(false);
         webapp.setCopyWebInf(false);
-        webapp.setTempDirectory(createJettyTempDirectory(warPath));
+        webapp.setTempDirectory(jettyTmpDir);
 
         webapp.setWar(warPath);
 
@@ -119,13 +115,6 @@ class StartJettyHelper {
 
         server.start();
         server.join();
-    }
-
-    private static File createJettyTempDirectory(String warPath) throws IOException {
-        // Jettys temporary directory must be empty at startup.
-        // The war directory already contains our extracted war, so make a new one next to it.
-        Path workDir = Paths.get(warPath).getParent();
-        return Files.createTempDirectory(workDir, "jetty-tmp-").toFile();
     }
 
     private static void configureHttpAccessLogging(HandlerCollection handlers) {

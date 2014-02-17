@@ -66,15 +66,18 @@ class StartServerMain {
         String javaTmpDir = Files.createTempDirectory(workDir, "java-tmp-").toString();
         System.setProperty("java.io.tmpdir", javaTmpDir);
 
-        Path extractedWarDir = Files.createTempDirectory(workDir, "war-tmp-");
-        extractWar(warLocation, extractedWarDir);
+        Path warTmpDir = Files.createTempDirectory(workDir, "war-tmp-");
+        extractWar(warLocation, warTmpDir);
+        
+        // Jettys temporary directory must be empty on startup, so create a new one.
+        File jettyTmpDir = Files.createTempDirectory(workDir, "jetty-tmp-").toFile();
 
-        File[] containerLibs = extractedWarDir.resolve(EMBEDDED_CONTAINER_LIB_DIR).toFile().listFiles();
+        File[] containerLibs = warTmpDir.resolve(EMBEDDED_CONTAINER_LIB_DIR).toFile().listFiles();
         // Also load all libs of this webapp, so we can configure proper logging for the container.
-        File[] webappLibs = extractedWarDir.resolve("WEB-INF/lib").toFile().listFiles();
+        File[] webappLibs = warTmpDir.resolve("WEB-INF/lib").toFile().listFiles();
 
         URL[] serverClasspath = new URL[1 + containerLibs.length + webappLibs.length];
-        serverClasspath[0] = extractedWarDir.toUri().toURL();
+        serverClasspath[0] = warTmpDir.toUri().toURL();
 
         for (int i = 0; i < containerLibs.length; i++) {
             serverClasspath[1 + i] = containerLibs[i].toURI().toURL();
@@ -97,7 +100,7 @@ class StartServerMain {
 
         URLClassLoader serverLoader = new URLClassLoader(serverClasspath, extensionClassLoader);
         System.out.println("Starting server ...");
-        startJettyHelper(extractedWarDir.toString(), serverLoader, port);
+        startJettyHelper(warTmpDir.toString(), jettyTmpDir, serverLoader, port);
     }
 
     /**
@@ -110,20 +113,23 @@ class StartServerMain {
     private static Path prepareWorkDir(Path workDir) throws IOException {
         Files.createDirectories(workDir);
 
-        System.out.println("Cleaning up working directory: " + workDir + " ...");
+        boolean cleanupSuccessful = true;
         try (DirectoryStream<Path> workDirStream = Files.newDirectoryStream(workDir)) {
             for (Path workFile : workDirStream) {
                 try {
                     Files.walkFileTree(workFile, DIR_TERMINATOR);
                 } catch (IOException ex) {
-                    System.err.println("Unable to delete: " + workFile);
-                    System.err.println("Reason:");
-                    ex.printStackTrace(System.err);
+                    cleanupSuccessful = false;
                 }
             }
         }
+        if (!cleanupSuccessful) {
+            System.out.println("Could not clean up working directory: " + workDir);
+        }
         // Always use a clean unique subfolder to remove any possibility of name clashes with remaining files.
-        return Files.createTempDirectory(workDir, getWorkDirPrefix() + "--");
+        Path newWorkDir = Files.createTempDirectory(workDir, getWorkDirPrefix() + "--");
+        System.out.println("Will use working directory: " + newWorkDir);
+        return newWorkDir;
     }
 
     private static String getWorkDirPrefix() {
@@ -146,7 +152,7 @@ class StartServerMain {
                     Path parentDir = file.getParent();
                     Files.createDirectories(parentDir);
 
-                    try(InputStream entryIn = warFile.getInputStream(entry)){
+                    try (InputStream entryIn = warFile.getInputStream(entry)) {
                         Files.copy(entryIn, file);
                     }
                 }
@@ -178,14 +184,14 @@ class StartServerMain {
         }
     }
 
-    private static void startJettyHelper(String warPath, ClassLoader serverLoader, int port) throws ReflectiveOperationException {
+    private static void startJettyHelper(String warPath, File jettyTmpDir, ClassLoader serverLoader, int port) throws ReflectiveOperationException {
         // There is no static initializer or anything, so using .class is fine in the system classloader.
         Class<?> startJettyHelper = serverLoader.loadClass(StartJettyHelper.class.getName());
-        Method startJetty = startJettyHelper.getDeclaredMethod("startJetty", String.class, Integer.TYPE);
+        Method startJetty = startJettyHelper.getDeclaredMethod("startJetty", String.class, File.class, Integer.TYPE);
         startJetty.setAccessible(true);
 
         // Isolate ALL the things.
         Thread.currentThread().setContextClassLoader(serverLoader);
-        startJetty.invoke(null, warPath, port);
+        startJetty.invoke(null, warPath, jettyTmpDir, port);
     }
 }
